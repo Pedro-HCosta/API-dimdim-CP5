@@ -33,7 +33,7 @@ class CadastroIntegrationTest {
   mvc.perform(get("/api/clientes/"+id)).andExpect(status().isOk());
   mvc.perform(put("/api/clientes/"+id).contentType("application/json").content("{\"nome\":\"Pedro Atualizado\",\"email\":\"novo@example.com\"}"))
    .andExpect(status().isOk()).andExpect(jsonPath("$.nome").value("Pedro Atualizado"));
-  assertThat(clientes.findById(id).orElseThrow().getNome()).isEqualTo("Pedro Atualizado");
+  assertThat(clientes.findById(id).orElseThrow().getNome()  ).isEqualTo("Pedro Atualizado");
   var created=mvc.perform(post("/api/contas").contentType("application/json").content(conta(id,"10001","100.00")))
    .andExpect(status().isCreated()).andExpect(jsonPath("$.clienteId").value(id)).andReturn();
   long cid=mapper.readTree(created.getResponse().getContentAsString()).get("id").asLong();

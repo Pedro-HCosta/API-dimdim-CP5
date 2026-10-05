@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142c32"><title>DimDim | Clientes e contas</title>
+  <link rel="stylesheet" href="/styles.css"><script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="DimDim, início"><span class="brand-mark">d.</span><span>dimdim<span class="brand-dot">.</span></span></a>
+    <div class="workspace-label">GESTÃO BANCÁRIA</div>
+    <nav aria-label="Cadastros"><button class="nav-item active" data-tab="clientes" aria-current="page"><span class="nav-icon" aria-hidden="true">◉</span>Clientes <span class="nav-count" id="nav-clientes">0</span></button><button class="nav-item" data-tab="contas"><span class="nav-icon" aria-hidden="true">▤</span>Contas <span class="nav-count" id="nav-contas">0</span></button></nav>
+    <div class="sidebar-note"><span class="note-icon" aria-hidden="true">↗</span><strong>Uma conta começa<br>com uma conexão.</strong><p>Clientes e contas organizados em um só lugar.</p></div>
+    <div class="sidebar-footer"><span class="connection-dot" id="connection-dot"></span><span id="connection-label">Conectando à aplicação</span><small>Projeto acadêmico · DimDim</small></div>
+  </aside>
+  <main>
+    <header class="topbar"><span>Visão geral <span class="breadcrumb">/ Cadastros</span></span><span class="project-badge">DIMDIM · CP5</span></header>
+    <section class="intro"><div><span class="eyebrow">CONTROLE COM CLAREZA</span><h1>Seu cadastro, em dia<span>.</span></h1><p>Gerencie clientes e suas contas com simplicidade.</p></div><button class="button button-secondary" id="refresh"><span aria-hidden="true">↻</span> Atualizar dados</button></section>
+    <section class="stats" aria-label="Resumo dos cadastros"><article class="stat-card"><div class="stat-label">Clientes cadastrados<span class="stat-icon" aria-hidden="true">◉</span></div><strong id="stat-clientes">—</strong><span class="stat-caption">Relacionamentos que importam</span></article><article class="stat-card"><div class="stat-label">Contas cadastradas<span class="stat-icon" aria-hidden="true">▤</span></div><strong id="stat-contas">—</strong><span class="stat-caption">Vinculadas aos seus clientes</span></article><article class="stat-card balance-card"><div class="stat-label">Saldo cadastrado<span class="stat-icon" aria-hidden="true">↗</span></div><strong id="stat-saldo">—</strong><span class="stat-caption">Soma dos saldos das contas</span></article></section>
+    <div id="page-error" class="alert" role="alert" hidden></div>
+    <section class="records" aria-labelledby="records-title">
+      <div class="records-heading"><div><span class="eyebrow">SEUS REGISTROS</span><h2 id="records-title">Clientes</h2><p id="records-subtitle">Pessoas por trás de cada conta.</p></div><button class="button button-primary" id="new-record"><span aria-hidden="true">＋</span> Novo cliente</button></div>
+      <div class="toolbar"><label class="search-field"><span aria-hidden="true">⌕</span><input type="search" id="search" placeholder="Buscar por nome, email ou ID" aria-label="Buscar clientes"></label><span class="record-total" id="record-total">Carregando registros…</span></div>
+      <div class="table-wrap"><table><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div>
+      <div id="empty-state" class="empty-state" hidden><span class="empty-symbol" aria-hidden="true">◎</span><h3 id="empty-title">Tudo pronto para começar</h3><p id="empty-description">Adicione seu primeiro cliente para depois vincular uma conta.</p></div>
+      <footer class="table-footer"><span id="table-range">Carregando…</span><div class="pagination"><button class="page-button" id="prev" aria-label="Página anterior">←</button><span id="page-number">1 / 1</span><button class="page-button" id="next" aria-label="Próxima página">→</button></div></footer>
+    </section>
+    <footer class="main-footer"><span>dimdim<span class="brand-dot">.</span> <span class="footer-divider">|</span> Clareza para cuidar de cada detalhe.</span><span>Use apenas dados fictícios.</span></footer>
+  </main>
+  <dialog id="editor" aria-labelledby="editor-title"><form id="record-form"><div class="dialog-header"><div><span class="eyebrow">CADASTRO</span><h2 id="editor-title">Novo cliente</h2></div><button type="button" class="icon-button" data-close="editor" aria-label="Fechar formulário">×</button></div><div id="form-fields"></div><div id="form-error" class="alert" role="alert" hidden></div><div class="dialog-actions"><button type="button" class="button button-secondary" data-close="editor">Cancelar</button><button type="submit" class="button button-primary" id="save">Salvar cliente</button></div></form></dialog>
+  <dialog id="details" aria-labelledby="details-title"><div class="dialog-header"><div><span class="eyebrow">DETALHES DO REGISTRO</span><h2 id="details-title">Cliente</h2></div><button class="icon-button" data-close="details" aria-label="Fechar detalhes">×</button></div><dl id="details-fields"></dl><div class="dialog-actions"><button class="button button-secondary" data-close="details">Fechar</button></div></dialog>
+  <dialog id="confirmation" aria-labelledby="confirmation-title"><form id="delete-form"><div class="dialog-header"><div><span class="eyebrow">EXCLUSÃO</span><h2 id="confirmation-title">Excluir registro?</h2></div><button type="button" class="icon-button" data-close="confirmation" aria-label="Fechar confirmação">×</button></div><p id="delete-description"></p><p class="delete-note">Esta ação é permanente. Para excluir um cliente, remova primeiro as contas vinculadas.</p><div id="delete-error" class="alert" role="alert" hidden></div><div class="dialog-actions"><button type="button" class="button button-secondary" data-close="confirmation">Cancelar</button><button class="button button-danger" id="confirm-delete" type="submit">Excluir registro</button></div></form></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
