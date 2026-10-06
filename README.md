@@ -1,25 +1,179 @@
-# DimDim — backend do Checkpoint 2
+# DimDim CP5 — Aplicação Web e API
 
-API REST independente para cadastro de clientes e contas bancárias, criada para o checkpoint de **DevOps Tools & Cloud Computing — Aplicativos e Banco em Nuvem** da FIAP. Este projeto começa do zero e não reutiliza a Sprint 3.
+Aplicação Web do projeto **DimDim**, para o **2º Checkpoint do 2º Semestre de DevOps Tools & Cloud Computing**. Este repositório contém o código completo da API Java e o frontend integrado. O tutorial abaixo usa os scripts do repositório de automação separado.
 
-## Escopo desta etapa
+A solução utiliza uma aplicação Web DimDim com frontend HTML, CSS e JavaScript e API REST Java 17 com Spring Boot para cadastro de clientes e contas bancárias. O frontend é servido pelo próprio Spring Boot na rota `/`, consumindo a API pela mesma origem. Azure App Service Linux hospeda o JAR; Azure SQL Database PaaS persiste os dados; Application Insights registra requisições HTTP e dependências SQL, com Log Analytics como workspace associado. O backend e a automação ficam em repositórios separados.
 
-Backend Java 17 / Spring Boot 3.5.6, Maven, Spring Data JPA, Bean Validation, driver Microsoft SQL Server e Actuator. Duas tabelas relacionadas, CRUD em ambas, DDL e coleção Postman incluídos. O saldo é um campo cadastral de demonstração: não há transferências, depósitos ou processamento financeiro real.
+## Repositórios e vídeo
 
-**Ainda falta para a entrega completa:** provisionamento e deploy automatizado por Azure CLI, configuração e comprovação do Application Insights, testes no Azure SQL, vídeo, links no GitHub e PDF dos integrantes. O frontend é opcional e pode render o ponto adicional descrito pelo professor. Os testes locais são preparação; a demonstração final deve acontecer na nuvem.
+- **Aplicação e API:** [API-dimdim-CP5](https://github.com/Pedro-HCosta/API-dimdim-CP5)
+- **Automação e DDL:** [DevOps-CP5-scripts](https://github.com/Pedro-HCosta/DevOps-CP5-scripts)
+- **Vídeo da demonstração:** [CP5 — WebApp](https://youtu.be/Nk6zc-SkF7g)
 
-## Organização
+## Arquitetura
+
+![Arquitetura macro de implantação](docs/arquitetura.svg)
+
+O diagrama representa recursos e conexões da implantação; a ordem de execução está no tutorial abaixo. App Service e monitoramento usam `mexicocentral`; o SQL usa `brazilsouth`, conforme o ambiente validado. A aplicação usa JDBC com criptografia e validação do certificado. O firewall SQL permite o IP do Cloud Shell e os IPs de saída do Web App.
+
+## Organização do repositório
 
 ```text
-src/main/java/br/com/fiap/dimdim/  API, DTOs, entidades, serviço e repositórios
-src/main/resources/              configuração do Azure SQL
+pom.xml
+src/main/java/br/com/fiap/dimdim/  controllers, DTOs, serviço, entidades e repositórios
+src/main/resources/application.yml
+src/main/resources/static/
+  index.html
+  styles.css
+  app.js
 src/test/                       testes de integração e H2 exclusivo dos testes
-scripts/ddl.sql                 DDL para Azure SQL Database
-scripts/verificar-persistencia.sql consultas para evidenciar cada operação
-postman/                        JSON das operações GET, POST, PUT e DELETE
+docs/arquitetura.svg
+README.md
 ```
 
-Fluxo do backend: Controller → serviço transacional → repositório JPA → banco. As respostas usam DTOs para não serializar as entidades e os vínculos diretamente.
+Os scripts Azure CLI, o DDL `ddl.sql`, as consultas `verificar-persistencia.sql` e o arquivo `monitoramento.kql` ficam na pasta `scripts/` do [repositório de automação](https://github.com/Pedro-HCosta/DevOps-CP5-scripts). Este repositório contém o código da aplicação. Os exemplos JSON das operações estão documentados neste README.
+
+## Tecnologias
+
+- Java 17, Spring Boot 3.5.6 e Maven.
+- Spring Web, Spring Data JPA, Bean Validation e Actuator.
+- Microsoft JDBC Driver para conexão com Azure SQL.
+- HTML, CSS e JavaScript no frontend, sem etapa de build separada.
+- Azure App Service Linux, Azure SQL Database, Application Insights e Log Analytics.
+- H2 exclusivamente nos testes de integração.
+
+## Pré-requisitos
+
+Bash, Git, Azure CLI, Java 17, Maven, Python 3, curl e sqlcmd. A conta deve estar autenticada e ter permissão na assinatura configurada. No Cloud Shell, a sessão inicial normalmente já está autenticada. Não há instalador de dependências nos scripts.
+
+## Tutorial completo: Cloud Shell
+
+### 1. Clonar os dois repositórios
+
+```bash
+cd ~
+git clone https://github.com/Pedro-HCosta/API-dimdim-CP5.git API-dimdim-CP5
+git clone https://github.com/Pedro-HCosta/DevOps-CP5-scripts.git DevOps-CP5-scripts
+cd ~/DevOps-CP5-scripts/scripts
+```
+
+As pastas de destino devem estar livres. O tutorial considera os scripts e os arquivos SQL organizados em `scripts/` no repositório de automação. Os scripts carregam `00-variaveis.sh` internamente: não é necessário executar `export` ou `source`. Antes de começar em outra conta, ajuste nesse arquivo a assinatura, as regiões e os nomes. Não execute `00-variaveis.sh` separadamente. O clone da API deve ficar em `$HOME/API-dimdim-CP5` ou o campo `BACKEND_DIR` deve ser ajustado.
+
+### Configuração centralizada
+
+| Variável em `00-variaveis.sh` | Uso |
+|---|---|
+| `SUBSCRIPTION_ID` | Assinatura Azure em que os comandos serão executados |
+| `SUFFIX` | Sufixo usado para compor nomes de recursos |
+| `RESOURCE_GROUP` | Grupo dedicado no formato `rg-dimdim-cp5-${SUFFIX}` |
+| `LOCATION` | Região de App Service e monitoramento; nesta implantação, `mexicocentral` |
+| `SQL_LOCATION` | Região do servidor SQL; nesta implantação, `brazilsouth` |
+| `APP_SERVICE_SKU` | Plano de hospedagem `F1` |
+| `SQL_MODE` | Modo `FreeServerless` |
+| `DATABASE_NAME` | Nome do banco; nesta implantação, `free-sql-db-0377722` |
+| `BACKEND_DIR` | Caminho do clone da API: `$HOME/API-dimdim-CP5` |
+
+A configuração incluída nos scripts aponta para a assinatura do responsável pela demonstração. Para reproduzir em outra conta, informe uma assinatura à qual você tenha acesso. Os nomes do plano, Web App, servidor SQL, workspace e Application Insights também são definidos nesse arquivo. O script de provisionamento detecta o IPv4 público do terminal para configurar o firewall. Usuário e senha SQL são solicitados de forma oculta durante a execução.
+
+Para demonstrar **criação do zero**, escolha um `SUFFIX` disponível para um grupo ainda inexistente ou use a implantação dedicada após uma limpeza prévia. Reexecutar o provisionamento sobre recursos existentes demonstra reutilização, não criação do zero.
+
+### 2. Provisionar recursos, configurar aplicação e executar DDL
+
+```bash
+bash 01-provisionar.sh
+```
+
+Confirme com `CRIAR` e informe usuário e senha SQL nos prompts ocultos. O script registra provedores, cria grupo dedicado, plano F1 Linux, Web App Java 17 com frontend integrado, servidor SQL e banco serverless com oferta gratuita e `AutoPause`, Log Analytics e Application Insights. Configura rede, variáveis da aplicação e agente Java do Insights; executa `ddl.sql` por sqlcmd. Recursos existentes são reutilizados. O DDL cria os objetos ausentes, sem apagar dados nem migrar tabelas existentes.
+
+A criação do SQL interrompe se a oferta gratuita e `AutoPause` não forem confirmados. A oferta do SQL não significa que toda a solução seja gratuita; disponibilidade e quotas dependem da assinatura.
+
+### 3. Compilar, testar e fazer deploy
+
+```bash
+bash 02-deploy.sh
+```
+
+Executa `mvn -B -ntp clean verify` no clone da API. Publica `target/dimdim-backend.jar` por Azure CLI e aguarda `/actuator/health` retornar `UP`. O deploy utiliza a alternativa **Azure CLI + `az webapp deploy`** prevista nos requisitos. O comando está no script como `azc webapp deploy`; `azc` é a função de `00-variaveis.sh` que executa `az` com a assinatura e `--only-show-errors`.
+
+```bash
+azc webapp deploy --resource-group "$RESOURCE_GROUP" --name "$WEBAPP_NAME" --src-path target/dimdim-backend.jar --type jar --output none
+```
+
+Mostre os testes, `BUILD SUCCESS` e `Aplicação saudável`. Os testes Maven usam H2 somente no perfil de testes; a aplicação publicada usa Azure SQL.
+
+### Acessar e demonstrar o frontend
+
+Abra em um navegador a URL exibida ao final do deploy, sem acrescentar `/api` ou `/actuator/health`:
+
+```text
+https://<nome-do-webapp>.azurewebsites.net/
+```
+
+A página inicial apresenta resumo dos registros, clientes e contas. Os arquivos HTML, CSS e JavaScript ficam em `src/main/resources/static` no repositório da API e são incluídos no mesmo JAR. O deploy `02-deploy.sh` publica frontend e backend juntos, no mesmo App Service; nenhum recurso adicional é necessário.
+
+- **Clientes:** criar com nome/email, listar, buscar, consultar detalhes, editar e excluir.
+- **Contas:** criar com número, cliente vinculado, tipo e saldo; listar, buscar, consultar detalhes, editar e excluir.
+- Os detalhes usam GET por ID; cadastro usa POST; edição usa PUT; exclusão usa DELETE.
+- A interface solicita confirmação antes de excluir e apresenta os erros retornados pela API.
+- O resumo mostra a quantidade de clientes, contas e a soma dos saldos cadastrados. A interface percorre as páginas da API para montar o conjunto de registros; a tabela exibe oito registros por página.
+- Exclua contas vinculadas antes de excluir o cliente. Use somente dados fictícios.
+
+Para abrir apenas o console SQL durante o uso da interface, na pasta `scripts`, execute:
+
+```bash
+bash -c 'source ./00-variaveis.sh; executar_sql --console'
+```
+
+As variáveis são carregadas dentro desse comando; informe as credenciais ocultas. Digite seus `SELECT`, execute com `GO` e finalize com `EXIT`.
+
+No vídeo, mostre a interface depois do deploy e demonstre o CRUD de ambas as entidades. Mantenha o Cloud Shell disponível para consultar o SQL após cada operação. O teste automatizado abaixo continua disponível para demonstrar as dez operações com pausas no sqlcmd.
+
+### 4. CRUD e consultas SQL manuais
+
+```bash
+bash 03-testar-api.sh --console
+```
+
+Informe as credenciais SQL ocultas. Depois de cada chamada HTTP, o script mostra o status e o JSON e abre sqlcmd no banco. Execute você mesmo:
+
+```sql
+SELECT * FROM dbo.clientes;
+SELECT * FROM dbo.contas;
+GO
+```
+
+Leia os resultados e digite `EXIT` para voltar ao teste. São dez chamadas: POST, GET da lista, GET por ID e PUT de cliente; POST, GET da lista, GET por ID e PUT de conta; DELETE de conta; DELETE de cliente. Consulte após todas, inclusive GET e DELETE. A conta deve ser excluída antes do cliente por causa da chave estrangeira. Os dados de teste são fictícios e exclusivos por execução; o script remove os registros que criou ao concluir.
+
+| Pausa | Operação | Conferência no Azure SQL |
+|---|---|---|
+| 1 | POST cliente | Novo cliente com ID, nome e email |
+| 2 | GET lista de clientes | Cliente permanece salvo |
+| 3 | GET cliente por ID | Mesmo cliente retornado pela API |
+| 4 | PUT cliente | Nome alterado para `Cliente CP5 Atualizado` |
+| 5 | POST conta | Conta criada com `cliente_id` do cliente |
+| 6 | GET lista de contas | Conta permanece salva |
+| 7 | GET conta por ID | Mesma conta retornada pela API |
+| 8 | PUT conta | Tipo `POUPANCA` e saldo `250.00` |
+| 9 | DELETE conta | Conta de teste ausente; cliente permanece |
+| 10 | DELETE cliente | Cliente de teste ausente |
+
+A verificação deve ser feita **após cada operação em cada tabela**, inclusive leitura e exclusão. Se o teste for interrompido, os registros já criados podem permanecer no banco; os IDs são exibidos no terminal.
+
+### 5. Consultar o Application Insights
+
+```bash
+bash 04-monitoramento.sh
+```
+
+Consulta o workspace associado ao Insights por `az rest`, filtrando o recurso correto. Mostra `AppRequests` (requisições HTTP) e `AppDependencies` (SQL), com status/sucesso e duração. Se ainda não houver dados, aguarde a ingestão e repita. Resultados vazios não comprovam coleta. A autenticação da API de logs pode exigir login por código de dispositivo; recursos e consultas são operados pelo CLI.
+
+### 6. Limpar recursos depois das evidências
+
+```bash
+bash 99-limpar-tudo.sh --aguardar
+```
+
+Confira a lista de recursos e digite o nome completo do grupo para confirmar. O script exclui o grupo dedicado e aguarda confirmar a exclusão. App Service, plano, SQL, Application Insights e Log Analytics desse grupo serão excluídos. A API ficará indisponível após a limpeza; o vídeo preserva a demonstração.
 
 ## Modelo de dados
 
@@ -40,103 +194,181 @@ erDiagram
     }
 ```
 
-Um cliente pode ter várias contas. Uma conta pertence a um cliente. E-mails são normalizados para minúsculas. Conta exige número de 4 a 20 dígitos, tipo `CORRENTE` ou `POUPANCA`, saldo não negativo com até duas casas decimais e cliente existente. Não é permitido excluir cliente com contas: primeiro exclua as contas. PUT substitui todos os campos editáveis e permite mudar o cliente da conta.
+O backend usa controllers REST, DTOs, serviço transacional e repositórios JPA. E-mails são normalizados para minúsculas. O número da conta exige de 4 a 20 dígitos; o saldo aceita até duas casas decimais. PUT permite alterar o cliente vinculado, desde que ele exista. O saldo é cadastral: não há operações de transferência, depósito ou processamento financeiro real. A demonstração usa dados fictícios e não implementa autenticação de usuários.
 
-## Testar sem credenciais de nuvem
+## Modelo e operações
 
-Pré-requisitos: JDK 17 e Maven 3.6.3 ou superior (recomendado 3.9.x).
+`clientes` tem ID, nome e email único; `contas` tem ID, número único, tipo, saldo e `cliente_id` como FK. Relação 1:N: um cliente pode possuir várias contas. Tipos permitidos: `CORRENTE` e `POUPANCA`. Saldo não negativo. Não é permitido excluir cliente com conta vinculada.
 
-```bash
-mvn clean verify
-```
-
-Validação executada: `mvn verify` concluído com sucesso; quatro testes de integração, zero falhas e zero erros; JAR executável gerado. A integração com Azure SQL ainda não foi executada.
-
-Os testes iniciam Spring Boot com MockMvc e H2 no perfil `test`, disponível somente em `src/test`. Verificam CRUD completo, persistência, relacionamento, exclusão bloqueada, duplicidades e rollback, referências inexistentes, JSON inválido, validação e reatribuição de conta. H2 não substitui a validação no Azure SQL.
-
-## Executar com Azure SQL Database
-
-1. Tenha um servidor lógico SQL e um Azure SQL Database. Configure acesso de rede ao banco para o ambiente que executará a aplicação.
-2. No editor SQL conectado ao banco correto, execute `scripts/ddl.sql` uma vez. A aplicação usa `ddl-auto: validate`: valida o esquema e não cria/apaga tabelas automaticamente.
-3. Configure as variáveis de ambiente. **Não publique valores reais nem grave credenciais no repositório.** `.env.example` é um modelo: Spring Boot não importa `.env` automaticamente.
-
-Linux/macOS:
-
-```bash
-export DB_URL='jdbc:sqlserver://SEU_SERVIDOR.database.windows.net:1433;databaseName=SEU_BANCO;encrypt=true;trustServerCertificate=false;loginTimeout=30;'
-read -r -p 'Usuário SQL: ' DB_USERNAME
-export DB_USERNAME
-read -r -s -p 'Senha SQL: ' DB_PASSWORD
-export DB_PASSWORD
-mvn clean package
-java -jar target/dimdim-backend.jar
-```
-
-PowerShell:
-
-```powershell
-$env:DB_URL = 'jdbc:sqlserver://SEU_SERVIDOR.database.windows.net:1433;databaseName=SEU_BANCO;encrypt=true;trustServerCertificate=false;loginTimeout=30;'
-$cred = Get-Credential -Message 'Credenciais do Azure SQL'
-$env:DB_USERNAME = $cred.UserName
-$env:DB_PASSWORD = $cred.GetNetworkCredential().Password
-mvn clean package
-java -jar target/dimdim-backend.jar
-```
-
-Configurações opcionais: `SERVER_PORT` (padrão 8080). `/actuator/health` verifica também a conexão com o banco, sem divulgar os detalhes. A conexão JDBC exige criptografia e valida o certificado do servidor.
-
-No futuro App Service, configure `DB_URL`, `DB_USERNAME` e `DB_PASSWORD` nas variáveis do aplicativo. O JAR é `target/dimdim-backend.jar`. Não use o perfil de testes no deploy.
-
-## Operações REST
-
-| Método | Clientes | Contas | Resultado |
+| Método | Clientes | Contas | Status esperado |
 |---|---|---|---|
-| POST | `/api/clientes` | `/api/contas` | 201 + Location + registro |
-| GET | `/api/clientes` | `/api/contas` | 200 + página de registros |
-| GET | `/api/clientes/{id}` | `/api/contas/{id}` | 200 + registro |
-| PUT | `/api/clientes/{id}` | `/api/contas/{id}` | 200 + registro atualizado |
-| DELETE | `/api/clientes/{id}` | `/api/contas/{id}` | 204 sem corpo |
+| POST | /api/clientes | /api/contas | 201 |
+| GET | /api/clientes | /api/contas | 200 |
+| GET | /api/clientes/{id} | /api/contas/{id} | 200 |
+| PUT | /api/clientes/{id} | /api/contas/{id} | 200 |
+| DELETE | /api/clientes/{id} | /api/contas/{id} | 204 |
 
-Listagem paginada: `?page=0&size=20&sort=id,asc` (máximo 100 por página). A lista fica no campo `content`. Não há corpo em GET e DELETE.
+### Exemplos JSON das operações
 
-Cliente — POST/PUT:
+Os exemplos usam IDs ilustrativos. Substitua-os pelos IDs retornados na criação. O script de teste usa valores únicos a cada execução. A URL base é exibida pelo deploy e tem o formato `https://<nome-do-webapp>.azurewebsites.net`.
+
+#### Clientes: POST `/api/clientes`
+
+Corpo da requisição:
 
 ```json
-{"nome":"Pedro Demo","email":"pedro@example.com"}
+{"nome":"Cliente Demo","email":"demo@example.com"}
 ```
 
-Conta — POST/PUT (use o ID devolvido ao criar o cliente):
+Resposta `201 Created`:
+
+```json
+{"id":1,"nome":"Cliente Demo","email":"demo@example.com"}
+```
+
+#### Clientes: GET `/api/clientes/1`
+
+Sem corpo na requisição. Resposta `200 OK`:
+
+```json
+{"id":1,"nome":"Cliente Demo","email":"demo@example.com"}
+```
+
+GET `/api/clientes` retorna uma página de registros. O trecho abaixo mostra o campo `content`; a resposta também inclui metadados de paginação:
+
+```json
+{"content":[{"id":1,"nome":"Cliente Demo","email":"demo@example.com"}]}
+```
+
+#### Clientes: PUT `/api/clientes/1`
+
+Corpo da requisição:
+
+```json
+{"nome":"Cliente Atualizado","email":"demo@example.com"}
+```
+
+Resposta `200 OK`:
+
+```json
+{"id":1,"nome":"Cliente Atualizado","email":"demo@example.com"}
+```
+
+#### Contas: POST `/api/contas`
+
+Corpo da requisição, usando o ID do cliente existente:
 
 ```json
 {"numero":"10001","tipo":"CORRENTE","saldo":100.00,"clienteId":1}
 ```
 
-Conta — resposta:
+Resposta `201 Created`:
 
 ```json
 {"id":1,"numero":"10001","tipo":"CORRENTE","saldo":100.00,"clienteId":1}
 ```
 
-Erros em formato Problem Detail: 400 para dados inválidos; 404 para registro/cliente vinculado inexistente; 409 para duplicidade ou exclusão com vínculo. Mensagens de validação aparecem em `campos`. Exemplo:
+#### Contas: GET `/api/contas/1`
+
+Sem corpo na requisição. Resposta `200 OK`:
+
+```json
+{"id":1,"numero":"10001","tipo":"CORRENTE","saldo":100.00,"clienteId":1}
+```
+
+GET `/api/contas` retorna uma página de registros, incluindo o campo `content` e metadados de paginação. Exemplo parcial:
+
+```json
+{"content":[{"id":1,"numero":"10001","tipo":"CORRENTE","saldo":100.00,"clienteId":1}]}
+```
+
+#### Contas: PUT `/api/contas/1`
+
+Corpo da requisição:
+
+```json
+{"numero":"10001","tipo":"POUPANCA","saldo":250.00,"clienteId":1}
+```
+
+Resposta `200 OK`:
+
+```json
+{"id":1,"numero":"10001","tipo":"POUPANCA","saldo":250.00,"clienteId":1}
+```
+
+#### DELETE: conta e cliente
+
+Execute `DELETE /api/contas/1` antes de `DELETE /api/clientes/1`. Ambas as operações enviam **requisições sem corpo** e retornam `204 No Content`, **sem corpo JSON**. Não se envia `{}` e não se espera JSON na resposta.
+
+#### Validações e erros
+
+- `400 Bad Request`: dados inválidos.
+- `404 Not Found`: registro ou cliente vinculado inexistente.
+- `409 Conflict`: email/número duplicado ou tentativa de excluir cliente com conta vinculada.
+
+PUT substitui os campos editáveis; envie todos os campos do respectivo exemplo. A listagem aceita `?page=0&size=20&sort=id,asc`. Erros usam o formato Problem Detail. Exemplo de conflito:
 
 ```json
 {"type":"about:blank","title":"Conflict","status":409,"detail":"Exclua as contas vinculadas antes de excluir o cliente"}
 ```
 
-## Testar no Postman e preparar as evidências
+## Testes de integração
 
-Importe `postman/DimDim.postman_collection.json`. `baseUrl` começa com `http://localhost:8080` e deverá ser alterada para `https://SEU_APP.azurewebsites.net` na demonstração. As requisições de criação salvam automaticamente `clienteId` e `contaId` nas variáveis da coleção.
+Para executar a suíte de testes sem credenciais de nuvem:
 
-A coleção está ordenada: criar/listar/buscar/atualizar cliente; criar/listar/buscar/atualizar conta; excluir conta; excluir cliente. Rode `scripts/verificar-persistencia.sql` no Azure SQL após **cada** operação, inclusive GET. Os dados são fictícios. Uma segunda execução exige que a anterior tenha excluído os registros, ou que se mudem os valores únicos.
+```bash
+cd ~/API-dimdim-CP5
+mvn -B -ntp clean verify
+```
 
-## Próxima etapa: DevOps e monitoramento
+Os quatro testes de integração de `CadastroIntegrationTest` usam MockMvc e H2 no perfil `test`. Verificam CRUD, persistência, relacionamento, exclusão com vínculo, duplicidades, referências inexistentes e validação. H2 está limitado ao escopo de testes; a aplicação publicada usa o driver Microsoft SQL Server e Azure SQL.
 
-A arquitetura alvo é Azure App Service (Java) conectado ao Azure SQL Database, com Application Insights coletando requisições, falhas e dependências JDBC. O Actuator não substitui o Application Insights. Nenhum agente foi instalado nem monitoramento ativado nesta etapa; isso será configurado junto ao deploy. Na etapa de nuvem, acrescentar os scripts CLI em `scripts/`, how-to completo de provisionamento/deploy, diagrama macro dos recursos e evidências reais. Não gravar parâmetros SQL contendo dados pessoais no vídeo ou nos logs.
+O build gera `target/dimdim-backend.jar`, incluindo os arquivos do frontend. O script `02-deploy.sh` executa essa mesma verificação antes da publicação.
 
-O backend é uma demonstração acadêmica sem autenticação/autorização. Use apenas dados fictícios. Controle de acesso deve ser acrescentado antes de qualquer uso real com dados bancários.
+## Configuração da aplicação
 
-## Referências técnicas
+| Variável | Finalidade |
+|---|---|
+| `DB_URL` | URL JDBC do Azure SQL, com criptografia e validação de certificado |
+| `DB_USERNAME` | Usuário SQL |
+| `DB_PASSWORD` | Senha SQL |
+| `SERVER_PORT` | Porta HTTP; padrão `8080` |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Conexão de telemetria, configurada pelo provisionamento |
 
-- [Spring Boot — requisitos](https://docs.spring.io/spring-boot/3.5/system-requirements.html)
-- [Microsoft JDBC — conexão criptografada](https://learn.microsoft.com/en-us/sql/connect/jdbc/connecting-with-ssl-encryption)
-- [Application Insights Java](https://learn.microsoft.com/en-us/azure/azure-monitor/app/java-in-process-agent)
+O script `01-provisionar.sh` configura as credenciais e o agente do Insights no App Service. `application.yml` usa `ddl-auto: validate`: o esquema deve existir antes de a aplicação iniciar. O arquivo `.env.example` é uma referência; Spring Boot não o importa automaticamente. Não publique credenciais nem habilite o perfil `test` na aplicação em nuvem.
+
+`/actuator/health` retorna o estado da aplicação e verifica a conexão com o banco, sem expor detalhes internos. As rotas `/api/clientes` e `/api/contas` são consumidas pelo frontend na mesma origem.
+
+## Evidências no vídeo
+
+O vídeo deve apresentar a execução completa do tutorial com narração e resolução mínima de **720p**:
+
+1. Clonar os repositórios e apresentar a arquitetura e o DDL.
+2. Criar os recursos por CLI, mostrando a conclusão do provisionamento.
+3. Compilar, executar testes e publicar o JAR pelo `az webapp deploy`; abrir o frontend na URL do App Service.
+4. Demonstrar o frontend e o CRUD de clientes e contas, consultando o Azure SQL após cada operação.
+5. Mostrar as coletas HTTP e SQL do Application Insights pelo script de monitoramento.
+6. Executar a limpeza após registrar todas as evidências.
+
+A gravação está disponível no link indicado no início deste README. Mantenha o vídeo e ambos os repositórios acessíveis ao professor. A exclusão dos recursos após a demonstração torna a URL da aplicação indisponível; o código, a automação e a gravação permanecem como artefatos da entrega.
+
+## Tratamento de falhas
+
+| Situação | Ação |
+|---|---|
+| `pom.xml` não encontrado | Confira o clone da API e `BACKEND_DIR` |
+| `sqlcmd` não encontrado | Disponibilize a dependência no PATH ou em `$HOME/.local/bin/sqlcmd` |
+| Falha na criação de recurso | Leia o erro da Azure; confira região, nome disponível, permissões e quota |
+| Oferta gratuita SQL não confirmada | Confira `useFreeLimit` e `freeLimitExhaustionBehavior`; o script interrompe sem criar alternativa paga |
+| Falha de conexão SQL | Confira credenciais, firewall e estado do banco; se estiver retomando da pausa, aguarde e repita |
+| Health não retorna `UP` | Verifique DDL, credenciais, configuração da aplicação e acesso ao SQL |
+| Monitoramento sem linhas | Aguarde a ingestão, confirme chamadas à API e repita `04-monitoramento.sh` |
+| Limpeza bloqueada | Verifique permissões, locks e políticas; o script não remove essas proteções |
+
+Em caso de erro, a execução é interrompida; os recursos já criados podem permanecer no grupo. Credenciais não devem ser incluídas no GitHub nem exibidas no vídeo.
+
+## Demonstração da solução
+
+O responsável confirmou a execução de ponta a ponta no Azure em 05/10/2026, incluindo provisionamento, build, deploy, CRUD, monitoramento e limpeza, e confirmou o funcionamento do frontend integrado após a publicação. A gravação da entrega está em [CP5 — WebApp](https://youtu.be/Nk6zc-SkF7g).
+
+A reprodução deve seguir o tutorial deste README com uma assinatura disponível e a configuração ajustada em `00-variaveis.sh`.
